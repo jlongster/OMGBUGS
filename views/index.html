@@ -1,0 +1,90 @@
+{{layout "base"}}
+
+<div class="searchbar">
+  &lt;Choose a search&gt;
+</div>
+
+<div class="actionbar">
+  <div class="views">
+    Views:
+    <a href="#">Table</a>
+  </div>
+
+  <div class="actions">
+    <a href="#" class="default">Make Default</a> |
+    <a href="#" class="columns">Change Columns</a> |
+    Filter: <input id="filter-box" type="text" value="">
+    <input id="filter-clear" type="submit" value="clear" />
+  </div>
+</div>
+
+
+<section class="bugs">
+</section> 
+
+<div class="template bug-template">
+  <h2 class="title main">Bug <span class="id"></span> - <span class="summary"></span></h2>
+
+  <div class="bug-content">
+    <div class="basic-info">
+      <div class="important">
+        <div>Status: <span class="status"></span></div>
+        <div>Assigned To: <span class="assigned_to"></span></div>
+      </div>
+
+      <div>ID: <a class="id" target="_new" href="#"></a></div>
+      <div>Product/Component: <span class="product"></span> / <span class="component"></span></div>
+
+      <div>Priority: <span class="priority"></span></div>
+      <div>Milestone: <span class="target_milestone"></span></div>
+      <div>Url: <a class="url" href="#"></a></div>
+      <div>Whiteboard: <span class="whiteboard"></span></div>
+      <div>Keywords: <span class="keywords"></span></div>
+
+      <div>Reported: <span class="creation_time"></span> by <span class="creator"></span></div>
+    </div>
+
+    <div class="more-info">
+      <a href="#" class="edit">Edit this bug</a>
+      <div>CC list:</div>
+      <ul class="cc">
+        <li></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="comment-content">
+    <h2>Comments</h2>
+    <ul class="comments"></ul>
+  </div>
+
+  <div class="comment-post">
+    Reply:
+    <form action="/comment/" method="post">
+      <input type="hidden" name="id" value="">
+      <textarea name="content"></textarea>
+      <input type="submit" value="Post" />
+    </form>
+  </div>
+</div>
+
+<div class="template edit-template">
+  <h2 class="title">Editing bug <span class="id"></span></h2>
+
+  <form action="" method="post">
+    <select name="status">
+      <option></option>
+    </select>
+
+    <div>Whiteboard: <input type="text" name="whiteboard" /></div>
+    <input type="submit" value="Save" />
+  </form>
+</div>
+
+<div class="template comment-template">
+  <div class="meta">
+    <div class="author"></div>
+    <div class="date"></div>
+  </div>
+  <div class="text"></div>
+</div>

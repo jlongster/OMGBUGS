@@ -1,0 +1,22 @@
+{{layout "base"}}
+
+<section>
+
+<p>
+  Please login with your bugzilla credentials. <strong>I do not
+  store them.</strong>
+</p>
+
+{{if error}}
+<p class="error">
+  Invalid username/password.
+</p>
+{{/if}}
+
+<form action="" method="POST">
+  <div><span>Username:</span><input type="text" name="user" /></div>
+  <div><span>Password:</span><input type="password" name="pass" /></div>
+  <input type="submit" value="Login" />
+</form>
+
+</section>

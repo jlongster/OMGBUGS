@@ -1,0 +1,10 @@
+
+{{if err}}
+  ${err}
+{{else}}
+  <ul>
+  {{each(i, comment) bugs}}
+    <li>${comment.text}</li>
+  {{/each}}
+  </ul>
+{{/if}}

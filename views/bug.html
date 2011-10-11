@@ -1,0 +1,15 @@
+{{layout "base"}}
+
+<h2>${bug.summary}</h2>
+
+<div class="comments"></div>
+
+
+<script type="text/javascript">
+  $(function() {
+      var parts  = window.location.href.split('/');
+      var id = parts[parts.length-1];
+      socket.emit('get-comments', id);
+      socket.emit('index-comments', id);
+  });
+</script>

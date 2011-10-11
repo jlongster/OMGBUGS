@@ -1,0 +1,3 @@
+
+<password>=''
+curl -v 'https://bugzilla.mozilla.org/jsonrpc.cgi?method=Bug.get&params=%5B%7B%22ids%22:%20%5B%22674076%22,%20%22678504%22%5D,%20%22Bugzilla_login%22:%20%22jlong@mozilla.com%22,%20%22Bugzilla_password%22:%20%22<password>%22%7D%5D'
