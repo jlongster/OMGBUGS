@@ -29,6 +29,27 @@ $(function() {
             });
     }
     app.show_searches = show_searches;
+
+    $('nav a.file-bug').click(function(e) {
+        e.preventDefault();
+        var tmpl = $('.file-bug-template').html();
+        
+        Layers.push(tmpl, 'file-bug');
+    });
+
+    $('nav a.about').click(function(e) {
+        e.preventDefault();
+        var tmpl = $('.about-template').html();
+
+        Layers.push(tmpl, 'about');
+    });
+
+    $('nav a.settings').click(function(e) {
+        e.preventDefault();
+        var tmpl = $('.settings-template').html();
+
+        Layers.push(tmpl, 'settings');
+    });
     
     $('.actions .columns').click(function(e) {
         e.preventDefault();

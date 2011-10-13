@@ -86,6 +86,7 @@ function jsonrpc(user, method, params, http_method, cont) {
                 cont(null, res, content);
             }
             catch (e) {
+                console.log(e.message);
                 cont('JSON parse error', res, null);
             }
             
@@ -175,6 +176,34 @@ function bug_info(user, bugs, cont) {
                     cont(data.error, data.result.bugs);
                 }
             });
+
+    // function fetch(i, threshold) {
+    //     jsonrpc(user,
+    //             'Bug.get', 
+    //             [{ids: bugs.slice(i, threshold)}],
+    //             function(err, res, data) {
+    //                 // This is quite a hack, but we can only get a few
+    //                 // bugs at a time because we have to use GET
+    //                 // parameters and the URI can't exceed a certain
+    //                 // length
+    //                 var next = i + threshold;
+
+    //                 if(next < bugs.length) {
+    //                     fetch(next, threshold);
+    //                 }
+    //                 else {
+    //                     if(err) {
+    //                         console.log(err);
+    //                         cont(err);
+    //                     }
+    //                     else {
+    //                         cont(data.error, data.result.bugs);
+    //                     }
+    //                 }
+    //             });
+    // }
+
+    // fetch(0, 100);
 }
 
 // Scrape the search page for list of bugs, then call bug_info to get

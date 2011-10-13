@@ -34,7 +34,11 @@ app.get('/', function(req, res) {
     }
 });
 
-app.get('/about/', function(res, res) {
+app.get('/favicon.ico', function(req, res) {
+    res.sendfile('./media/img/favicon.ico');
+});
+
+app.get('/about/', function(req, res) {
     res.render('about', {page_id: 'about'});
 });
 
@@ -93,7 +97,7 @@ app.post('/comment/', function(req, res) {
                     });
 });
 
-app.listen(8000);
+app.listen(8001);
 
 var io = socket_io.listen(app);
 io.set('log level', 1);
@@ -143,6 +147,18 @@ io.sockets.on('connection', function(socket) {
             socket.emit('bugs', {search: msg.term,
                                  bugs: bugs,
                                  key: msg.key});
+        });
+    });
+
+    socket.on('index-searches', function() {
+        db.index_searches(user, function(searches) {
+            socket.emit('searches', searches);
+        });
+    });
+
+    socket.on('searches', function() {
+        db.get_searches(user, function(searches) {
+            socket.emit('searches', searches);
         });
     });
 

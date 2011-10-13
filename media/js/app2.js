@@ -61,6 +61,7 @@ $(function() {
             var _this = this;
 
             $(this.el)
+                .addClass('' + this.model.get('id'))
                 .html(
                 _.reduce(this.options.columns, 
                          function(acc, col) {
@@ -114,6 +115,8 @@ $(function() {
                 .directives(directives)
                 .render(data);
 
+            $('.bug ul.comments').empty();
+
             Layers.adjust();
 
             socket.emit('get-comments', bug.get('id'));
@@ -128,7 +131,8 @@ $(function() {
         className: 'tablesorter',
 
         initialize: function() {
-            _.bindAll(this, 'set_columns', 'get_columns', 'render');
+            _.bindAll(this, 'set_columns', 'get_columns', 'render',
+                      'add_row', 'remove_row', 'finalize');
             var _this = this;
 
             if(!this.options.columns) {
@@ -164,7 +168,9 @@ $(function() {
                 this.collection = new BugList();
             }
 
-            this.collection.bind('all', this.render);
+            this.collection.bind('add', this.add_row);
+            this.collection.bind('remove', this.remove_row);
+            this.collection.bind('reset', this.render);
 
             $('.bugs').append(this.el);
             
@@ -176,13 +182,36 @@ $(function() {
             var el = $(this.el);
 
             $('tbody', el).empty();
-            
-            _.each(this.collection.models, function(bug) {
-                $('tbody', this.el).append(
-                    new BugRowView({model: bug,
-                                    columns: _this.options.columns}).render().el
-                );
+
+            _.each(this.collection.models, function(model) {
+                _this.add_row(model);
             });
+
+            this.finalize();
+        },
+        
+        add_row: function(model) {
+            var el = $(this.el);
+            var view = 
+
+            $('tbody', this.el).append(
+                new BugRowView({model: model,
+                                columns: this.options.columns}).render().el
+            );
+        },
+
+        remove_row: function(model) {
+            var id = model.get('id');
+
+            $('tbody tr', this.el).each(function() {
+                if(this.bug_id == id) {
+                    $(this).remove();
+                }
+            });
+        },
+
+        finalize: function() {
+            var el = $(this.el);
 
             el.trigger('update');
             el.trigger('setCache');
@@ -208,7 +237,7 @@ $(function() {
             // hack to get it working (ugh!)
             setTimeout(function() {
                 $(_this.el).trigger('sorton', [sorts]);
-            }, 100);
+            }, 200);
         },
 
         save_sort: function(table) {
@@ -236,6 +265,11 @@ $(function() {
         
         get_columns: function() {
             return this.options.columns;
+        },
+
+        destroy: function() {
+            $('#filter-box').unbind('keyup');
+            bug_table.remove();
         }
     });
 
@@ -315,7 +349,8 @@ $(function() {
 
     function refresh_search() {
         if(!app.current_bug) {
-            search(app.current_search);
+            search(app.current_search, true);
+            socket.emit('searches');
         }
     }
 
@@ -368,8 +403,16 @@ $(function() {
         type: 'numeric'
     });
 
-    function search(term) {
+    function search(term, no_recreate) {
         app.current_search = term;
+        
+        if(!no_recreate) {
+            if(bug_table) {
+                bug_table.collection = null;
+            }
+
+            make_table();
+        }
 
         socket.emit('search', {term: term});
         socket.emit('index-search', {term: term});
@@ -383,6 +426,7 @@ $(function() {
     function set_columns(columns) {
         settings.columns = columns;
         app.socket.emit('settings', settings);
+
         make_table();
     }
 
@@ -391,7 +435,7 @@ $(function() {
 
         if(bug_table) {
             opts.collection = bug_table.collection;
-            bug_table.remove();
+            bug_table.destroy();
         }
 
         app.bug_table = bug_table = new BugTableView(opts);
@@ -400,20 +444,20 @@ $(function() {
     var builtin_searches = ['Assigned to You', 'Reported by You'];
 
     var bug_table;
-    var settings;
+    var settings = {columns: ['summary', 'assigned_to'],
+                    sorts:[{field: 'summary', order: 1}]};
     var socket = io.connect();
 
     socket.on('settings', function(opts) {
-        app.settings = settings = opts;
-
-        if(app.current_search && !settings.sorts[app.current_search]) {
-            settings.sorts[app.current_search] = [{field: 'summary', order: 1}];
+        if(opts) {
+            app.settings = settings = _.extend(settings, opts);
         }
 
-        make_table();
-        
         if(settings.default_search) {
             search(settings.default_search);
+        }
+        else {
+            make_table();
         }
     });
 
@@ -422,7 +466,48 @@ $(function() {
             $('.searchbar').text(app.current_search);
             $('.actionbar').show();
 
-            bug_table.collection.reset(msg.bugs);
+            var model, collection = bug_table.collection;
+            var ids = _.map(msg.bugs, function(bug) { return bug.id; });
+            var added = [];
+
+            _.each(msg.bugs, function(bug) {
+                if((model = collection.get(bug.id))) {
+                    model.set(bug);
+                }
+                else {
+                    collection.add(new Bug(bug));
+                    added.push(bug.id);
+                }
+            });
+
+            var model_ids = _.map(collection.models, 
+                                  function(model) { 
+                                      return model.get('id');
+                                  });
+
+            var removed = _.difference(model_ids, ids);
+            _.each(removed, function(id) {
+                collection.remove(collection.get(id));
+            });
+
+            bug_table.finalize();
+
+            if(added.length < ids.length) {
+                var cls = _.map(added, function(id) { return '.' + id; }).join(',');
+                var els = $(cls);
+
+                // Highlight the row with a slow fade from red to
+                // white, then remove the background color to allow
+                // for the default css to still apply (striping,
+                // hovering, etc)
+                els.find('td')
+                    .css({'background-color': '#aa3333'})
+                    .animate({'background-color': '#ffffff'},
+                             10000,
+                             function() {
+                                 this.style.backgroundColor = '';
+                             });            
+            }
 
             if(app.current_bug) {
                 Layers.pop();

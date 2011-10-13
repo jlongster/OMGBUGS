@@ -17,7 +17,14 @@ function get_user_options(user, cont) {
 
 function set_user_options(user, opts) {
     db.get(user.name + '-options', function(err, res) {
-        var _opts = JSON.parse(res);
+        var _opts;
+        if(res) {
+            _opts = JSON.parse(res);
+        }
+        else {
+            _opts = {}
+        }
+
         db.set(user.name + '-options', 
                JSON.stringify(_.extend(_opts, opts)));
     });
@@ -47,9 +54,10 @@ function get_searches(user, cont) {
 }
 
 function index_bugs(user, search, cont) {
+    var key = user.name + '-buglist-' + search;
+
     bz.get_bugs(user, search, function(err, bugs) {
         if(!err) {
-            var key = user.name + '-buglist-' + search;
             var trans = db.multi().del(key);
 
             _.each(bugs, function(bug) {
@@ -67,7 +75,7 @@ function index_bugs(user, search, cont) {
         else {
             cont && cont();
         }
-    })
+    });
 }
 
 function sort_bugs(bugs, cont) {
