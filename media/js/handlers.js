@@ -1,6 +1,27 @@
 
 $(function() {
 
+    // templates and selectors
+    var templates = {};
+
+    $(function() {
+        // Load in the templates
+        _.each(['comment', 'bug', 'edit',
+                'file-bug', 'about', 'settings'],
+               function(tmpl) {
+                   var name = tmpl.replace(/-/g, '_');
+
+                   templates[name] = $('.' + tmpl + '-template').html();
+               });
+    });
+
+    var s = {
+        searchbar: '.searchbar',
+        actionbar: '.actionbar'
+    }
+
+    // interface functions
+
     function show_searches() {
         function render_searches(lst) {
             return _.reduce(lst, function(acc, s) {
@@ -28,27 +49,103 @@ $(function() {
                 app.search(search);
             });
     }
-    app.show_searches = show_searches;
+
+    function edit_bug() {
+        var bug = app.current_bug.model;
+        var tmpl = templates.edit;
+        var data = _.clone(bug.attributes);
+        data['statuses'] = ['UNCONFIRMED', 'NEW', 'ASSIGNED', 'REOPENED', 'RESOLVED'];
+
+        var directives = {
+            '.id': 'id',
+            'input[name=whiteboard]@value': 'whiteboard',
+            'select[name=status] option': {
+                'status<-statuses': {
+                    '.': 'status',
+                    '.@value': 'status',
+                    '.@selected': function(ctx) {
+                        return ctx.item == ctx.context.status ? true : '';
+                    }
+                }
+            }
+        }
+
+        Layers.push(tmpl, 'edit-bug');
+        
+        $('.edit-bug')
+            .directives(directives)
+            .render(data);        
+    }
+
+    function move_bug(dir) {
+        var ids = [];
+        $(app.bug_table.el).find('tbody tr').each(function() {
+            ids.push(this.bug_id);
+        });
+
+        var idx = _.indexOf(ids, app.current_bug.model.get('id'));
+        var target_idx = idx+dir;
+
+        if(idx != -1 && target_idx < ids.length && target_idx >= 0) {
+            var id = ids[target_idx], view;
+
+            view = new views.BugView(
+                {model: app.bug_table.collection.get(id)}
+            )
+            Layers.pop();
+            view.render();
+        }
+    }
+
+    function prev_bug() {
+        move_bug(-1);
+    }
+
+    function next_bug() {
+        move_bug(1);
+    }
+
+    function comment_top() {
+        if(app.current_bug) {
+            var container = $('.bug');
+            window.scrollTo(0, container.offset().top - 50);
+        }
+    }
+
+    function reply() {
+        if(app.current_bug) {
+            var container = $('.bug .comment-post');
+            window.scrollTo(0, container.offset().top - 300);
+            
+            container.find('textarea').focus();
+        }
+    }
+
+    function add_pending_comment(content) {
+        var comment = new models.Comment({author: 'Pending...',
+                                          time: new Date(),
+                                          text: content});
+
+        new views.CommentView({parent: $('ul.comments'),
+                               model: comment,
+                               className: 'pending'}).render();
+    }
+
+    // interface actions
 
     $('nav a.file-bug').click(function(e) {
         e.preventDefault();
-        var tmpl = $('.file-bug-template').html();
-        
-        Layers.push(tmpl, 'file-bug');
+        Layers.push(templates.file_bug, 'file-bug');
     });
 
     $('nav a.about').click(function(e) {
         e.preventDefault();
-        var tmpl = $('.about-template').html();
-
-        Layers.push(tmpl, 'about');
+        Layers.push(templates.about, 'about');
     });
 
     $('nav a.settings').click(function(e) {
         e.preventDefault();
-        var tmpl = $('.settings-template').html();
-
-        Layers.push(tmpl, 'settings');
+        Layers.push(templates.settings, 'settings');
     });
     
     $('.actions .columns').click(function(e) {
@@ -67,7 +164,7 @@ $(function() {
                 return acc;
             }, '') +
             '</ul>' +
-            '<textarea>' + app.bug_table.get_columns().join('\n') + '</textarea>' +
+            '<textarea>' + app.settings.columns.join('\n') + '</textarea>' +
             '</div>' +
             '<input name ="save" type="submit" value="Save" />',
             'columns'
@@ -91,11 +188,11 @@ $(function() {
 
     $('.searchbar').click(function(e) {
         e.preventDefault();
-        app.show_searches();
+        show_searches();
     });
 
     $('#filter-clear').click(function() {
-        $('table').trigger('clearFilter');
+        $(app.bug_table.el).trigger('clearFilter');
     });
 
     $('.bug .comment-post input[type=submit]').live('click', function(e) {
@@ -119,7 +216,7 @@ $(function() {
 
     $('.bug a.edit').live('click', function(e) {
         e.preventDefault();
-        app.edit_bug();
+        edit_bug();
     });
 
     $('.edit-bug input[type=submit]').live('click', function(e) {
@@ -130,7 +227,7 @@ $(function() {
             return form.find('[name=' + name + ']').val();
         }
 
-        var id = app.current_bug.get('id');
+        var id = app.current_bug.model.get('id');
         var data = {
             id: id,
             whiteboard: get_field('whiteboard'),
@@ -147,4 +244,17 @@ $(function() {
                 console.log('bug edit error');
             });                          
     });
+
+    window.interface = {
+        add_pending_comment: add_pending_comment,
+        prev_bug: prev_bug,
+        next_bug: next_bug,
+        edit_bug: edit_bug,
+        reply: reply,
+        show_searches: show_searches,
+        comment_top: comment_top,
+        s: s
+    };
+
+    window.templates = templates;
 });

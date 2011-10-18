@@ -1,222 +1,166 @@
-
-function identity(x) { return x; }
-
 $(function() {
 
-    var current_bugs;
-    var opts = {
-        columns: ['summary']
-    };
+    var builtin_searches = ['Assigned to You', 'Reported by You'];
 
-    $('header select.tab').change(function(e) {
-        var term = $(this).find('option:selected').val();
-        search(term);
-    });
+    function search(term) {
+        app.current_search = term;
+        views.make_table();
 
-    $('.actions .columns').click(function(e) {
-        e.preventDefault();
-        
-        if(current_bugs) {
-            var html = '<ul>';
-            var bug = _.values(current_bugs)[0]
-
-            _.each(_.keys(bug).sort(), function(key) {
-                if(key.substr(0, 3) != 'cf_')
-                    html += '<li>' + key + '</li>';
-            });
-
-            html += '</ul>';
-
-            msgbox('<h2>Columns</h2>' +
-                   '<div class="columns">' +
-                   html +
-                   '<textarea>' + opts.columns.join('\n') + '</textarea>' +
-                   '</div>' +
-                   '<input name="save" type="submit" value="Save" />');
-
-            $('#msgbox input[name=save]').click(function() {
-                opts.columns = $('#msgbox textarea').val().split('\n');
-                msgbox_close();
-                socket.emit('options', opts);b
-            });
-        }
-    });
-
-    function set_options(_opts) {
-        opts.columns = _opts.columns || opts.columns;
-    }
-
-    var msgs = [];
-    function status(msg) {
-        msgs.push(msg);
-        show_status();
-        return msgs.length-1;
+        socket.emit('get-bugs', term);
     }
     
-    _should_show_status = true;
-    function show_status() {
-        if(_should_show_status) {
-            $('.status').html(msgs.filter(identity).join(' ** '))
-                .addClass('show');
+    function set_default_search() {
+        app.settings.default_search = app.current_search;
+
+        socket.emit('set-settings', app.settings);
+    }
+
+    function set_columns(columns) {
+        app.settings.columns = columns;
+        views.make_table(true);
+
+        socket.emit('set-settings', app.settings);
+    }
+
+    function set_sort(search, sort) {
+        if(!app.settings.sorts) {
+            app.settings.sorts = {};
+        }
+
+        if(app.settings.sorts[search] != sort) {
+            app.settings.sorts[search] = sort;
+            socket.emit('set-settings', app.settings);
         }
     }
 
-    function offline_mode() {
-        $('.status').html('Bugzilla is offline, showing only cached results')
-            .css({color: 'red'})
-            .show();
-
-        _should_show_status = false;
+    function get_comments(id) {
+        socket.emit('get-comments', id);
     }
 
-    function finished(key) {
-        msgs[key] = null;
-        if(!msgs.filter(identity).length) {
-            msgs = [];
-            $('.status').removeClass('show');
-        }
-        else {
-            show_status();
+    function update_comments(id) {
+        socket.emit('update-comments', id);
+    }
+
+    // update the world (this is run in polling mode)
+    function update() {
+        if(app.mode == 'poll') {
+            socket.emit('update');
         }
     }
 
-    function msgbox(msg) {
-        if(!$('#msgbox').length) {
-            $('<div id="msgbox-wrapper"><div id="msgbox"></div></div>').appendTo('body');
-            $('#msgbox-wrapper').click(msgbox_close);
-            $('#msgbox').click(function(e) { e.stopPropagation(); });
-        }
+    // messages
+    var socket = io.connect();
 
-        $('#msgbox').html(msg);
-        $('#msgbox-wrapper').show();
-    }
+    socket.on('set-mode', function(mode) {
+        app.mode = mode;
 
-    function msgbox_close() {
-        $('#msgbox-wrapper').hide();
-    }
-
-    function search(name) {
-        if(name) {
-            var key = status('Searching...');
-            socket.emit('search', {term: name,
-                                   key: key});
-
-            socket.emit('index-search', {term: name});
-        }
-    }
-
-    function format_bug(id) {
-        if(!current_bugs[id]) {
-            return '<p>Bug not found</p>';
-        }
-        else {
-            var bug = current_bugs[id];
-            return '<h2>' + bug.summary + '</h2>' +
-                '<div>Assignee: ' + bug.assigned_to + '</div>' +
-                '<div>Url: ' + bug.url + '</div>' +
-                '<div class="comments"></div>';
-        }
-    }
-    
-
-    window.socket = io.connect();
-
-    socket.on('error', function(err) {
-        console.log(err);
-    });
-
-    socket.on('searches', function(searches) {
-        if(searches) {            
-            $('header select.tab').html(
-                '<option value="">-</option>' +
-                searches.map(function(term) {
-                    return '<option value="' + term + '">' + term + '</option>';
-                }).join('')
-            );
-        }
-        else {
-            offline_mode();
+        if(app.mode == 'poll') {
+            // Update every 5 minutes
+            setInterval(update, 1000*60*5);
         }
     });
 
-    socket.on('bugs', function(msg) {
-        var bugs = $('section.bugs');
-        var str = '<table class="tablesorter">';
+    socket.on('update-settings', function(opts) {
+        if(!_.keys(app.settings).length) {
+            // this is the first time we're getting the settings,
+            // which means the user just loaded the page. go ahead and
+            // kick off an update to all the user's bugs
+            update();
+        }
 
-        current_bugs = {};
+        app.settings = opts;
 
-        str += '<thead><tr>';
-        
-        _.each(opts.columns, function(c) {
-            str += '<th>' + c + '</th>';
-        });
-        
-        str += '</tr></thead><tbody>';
+        if(!app.current_search && app.settings.default_search) {
+            search(app.settings.default_search);
+        }
+        else {
+            views.make_table(true);
+        }
+    });
 
-        $.each(msg.bugs, function(i, bug) {
-            current_bugs[bug.id] = bug;
+    socket.on('begin-bugs', function(search) {
+        if(search == app.current_search) {
+            $(interface.s.searchbar).text(app.current_search);
+            $(interface.s.actionbar).show();
 
-            str += '<tr class="' + bug.id + '">';
+            // begin a mark and sweep collection by unmarking all the
+            // current bugs
+            _.each(app.bug_table.collection.models, function(bug) {
+                bug.set({marked: false});
+            });
+        }
+    });
 
-            _.each(opts.columns, function(c) {
-                str += '<td>' + bug[c] + '</td>';
+    socket.on('add-bugs', function(msg) {
+        if(msg.search == app.current_search) {
+            var model,
+                col = app.bug_table.collection;
+
+            _.each(msg.bugs, function(bug) {
+                bug = _.extend(bug, {marked: true});
+
+                if((model = col.get(bug.id))) {
+                    model.set(bug);
+                }
+                else {
+                    col.add(new models.Bug(bug));
+                }
             });
 
-            str += '</tr>';
-        });
-
-        str += '</tbody></table>';
-        var el = $(str);
-        bugs.html(el);
-
-        el.tablesorter();
-
-        var row = el.find('tbody tr');
-        row.click(function(e) {
-            e.stopPropagation();
-            window.location = '/bug/' + this.className;
-        });
-
-        finished(msg.key);
+            // TODO: need to update current bug if one is open
+        }
     });
 
-    (function() {
-        var msg;
+    socket.on('end-bugs', function(search) {
+        if(search == app.current_search) {
+            var to_remove = [];
+            var col = app.bug_table.collection;
 
-        socket.on('begin-indexing-searches', function() {
-            msg = status('Updating saved searches...');
+            // remove all the bugs that haven't been marked
+            _.each(col.models, function(bug) {
+                if(!bug.get('marked')) {
+                    to_remove.push(bug);
+                }
+            });
+
+            col.remove(to_remove);
+            app.bug_table.finalize();
+        }
+    });
+
+    socket.on('update-searches', function(searches) {
+        app.searches = searches;
+    });
+
+    socket.on('update-comments', function(comments) {
+        var container = $('.bug ul.comments');
+        container.empty();
+
+        _.each(comments, function(comment) {
+            if(comment.text.length) {
+                new views.CommentView(
+                    {parent: container,
+                     model: new models.Comment(comment)}
+                ).render()
+            }
         });
 
-        socket.on('done-indexing-searches', function() {
-            finished(msg);
-        });
-    })();
-
-    socket.on('new-user', function() {
-        msgbox('<h1>Indexing...</h1>' +
-               '<p>We need to get some of your data first!</p>');
+        Layers.adjust();
     });
 
-    socket.on('new-user-finished', function() {
-        msgbox('<h1>Done!</h1>' +
-               '<p>Thanks for waiting, we have some data to start with!</p>');
-        setTimeout(function() {
-            msgbox_close();
-        }, 3000);
-    });
+    socket.emit('get-searches');
+    socket.emit('get-settings');
 
-    socket.on('comments', function(comments) {
-        $('div.comments').html(
-            '<ul>' +
-            _.reduce(comments, function(acc, c) {
-                return acc + '<li>' + c.text + '</li>';
-            }, '') +
-            '</ul>'
-        );
-    });
-
+    // exports
     window.app = {
-        set_options: set_options,
-        socket: socket
+        set_default_search: set_default_search,
+        set_columns: set_columns,
+        set_sort: set_sort,
+        bug_table: null,
+        settings: {},
+        builtin_searches: builtin_searches,
+        search: search,
+        get_comments: get_comments,
+        update_comments: update_comments
     }
 });

@@ -1,21 +1,29 @@
 var connect = require('connect');
-var scrape = require('./scrape');
 var https = require('https');
 var qs = require('querystring');
+var events = require('events');
+
+var scrape = require('./scrape');
 var _ = require('./underscore');
+
 
 var SAVED_SEARCHES_URL = '/userprefs.cgi?tab=saved-searches';
 var BUGLIST_URL = '/buglist.cgi?cmdtype=runnamed&namedcmd=';
 
 var _fake_user;
+var builtin_searches = {'Assigned to You': search_assigned,
+                        'Reported by You': search_reported};
+
+// if running locally, you have the option to bypass the login
+// system if you are offline and need to access bugs
 function turn_off_login(user) {
     _fake_user = {name: user,
                   login: '-',
                   logincookie: '-'};
 }
 
-function get_user(data) {
-    var cookies = data.cookies || data;
+function get_user(req_or_cookies) {
+    var cookies = req_or_cookies.cookies || req_or_cookies;
 
     if(_fake_user) {
         return _fake_user;
@@ -27,6 +35,7 @@ function get_user(data) {
                     logincookie: cookies.bugzilla_logincookie}
         if(!user.name || !user.login || !user.logincookie)
             return null;
+
         return user;
     }
 
@@ -162,83 +171,86 @@ function get_searches(user, cont) {
     });
 }
 
-// Call the JSONRPC method to get bug info
-function bug_info(user, bugs, cont) {
-    jsonrpc(user,
-            'Bug.get', 
-            [{ids: bugs}],
-            function(err, res, data) {
-                if(err) {
-                    console.log(err);
-                    cont(err);
-                }
-                else {
-                    cont(data.error, data.result.bugs);
-                }
-            });
-
-    // function fetch(i, threshold) {
-    //     jsonrpc(user,
-    //             'Bug.get', 
-    //             [{ids: bugs.slice(i, threshold)}],
-    //             function(err, res, data) {
-    //                 // This is quite a hack, but we can only get a few
-    //                 // bugs at a time because we have to use GET
-    //                 // parameters and the URI can't exceed a certain
-    //                 // length
-    //                 var next = i + threshold;
-
-    //                 if(next < bugs.length) {
-    //                     fetch(next, threshold);
-    //                 }
-    //                 else {
-    //                     if(err) {
-    //                         console.log(err);
-    //                         cont(err);
-    //                     }
-    //                     else {
-    //                         cont(data.error, data.result.bugs);
-    //                     }
-    //                 }
-    //             });
-    // }
-
-    // fetch(0, 100);
-}
-
-// Scrape the search page for list of bugs, then call bug_info to get
-// the details
-function get_bugs(user, search, cont) {
-    if(search.toLowerCase() == 'assigned to you') {
-        search_assigned(user, cont);
-        return;
-    }
-    else if(search.toLowerCase() == 'reported by you') {
-        search_reported(user, cont);
-        return;
-    }
-
+function BugSavedSearch(user, pass, search) {
+    var _this = this;
+    this.search = search;
+    this.user = user;
+    this.pass = pass;
+    
+    // first, get the list of all the bugs the search returns and then
+    // fetch them
     scrape.parse_url(user, BUGLIST_URL + search.replace(/ /g, '+'), function(err, window) {
         if(err) {
             cont(err);
             return;
         }
 
+        try {
         var list = window.$('.bz_buglist');
-
-        if(!list.length) {
-            console.log('Warning: list not found on bug page');
-        }
-
         var bugs = [];
         list.find('tbody tr').each(function() {
             // We get names that look like b123456, so strip
             // off the leading "b"
             bugs.push(this.id.substring(1));
-        });
+        });        
 
-        bug_info(user, bugs, cont);
+        _this.buglist = bugs;
+        _this.rfetch(0, 100);
+        }
+        catch(e) {
+            console.log(e.message);
+        }
     });
+}
+
+BugSavedSearch.prototype = new events.EventEmitter();
+
+// recursively fetch all the bugs in certain intervals. we have to do
+// this because we have to to use GET params and if the bug list is
+// too long we get an "URI is too long" error
+BugSavedSearch.prototype.rfetch = function(i, limit) {
+    var _this = this;
+    console.log('fetching', i, limit);
+
+    jsonrpc(this.user,
+            'Bug.get', 
+            [{ids: this.buglist.slice(i, i+limit),
+              Bugzilla_login: this.user.name,
+              Bugzilla_password: this.pass}],
+            function(err, res, data) {
+                console.log('got', i, limit);
+
+                if(err) {
+                    _this.emit('error', err);
+                }
+                else if(data.error) {
+                    _this.emit('error', data.error);
+                }
+                else {
+                    if(i+limit < _this.buglist.length) {
+                        _this.rfetch(i+limit, limit);
+                    }
+                    else {
+                        _this.emit('complete');
+                    }
+
+                    _this.emit('bugs', data.result.bugs);
+                }
+            });
+}
+
+function bug_saved_search(user, pass, search) {
+    return new BugSavedSearch(user, pass, search);
+}
+
+// Scrape the search page for list of bugs, then call bug_info to get
+// the details
+function get_bugs(user, pass, search) {
+    if(builtin_searches[search]) {
+        return builtin_searches[search](user, pass);
+    }
+
+    return bug_saved_search(user, pass, search);
 }
 
 function edit_bug(user, data, cont) {
@@ -260,10 +272,12 @@ function edit_bug(user, data, cont) {
             });
 }
 
-function get_comments(user, id, cont) {
+function get_comments(user, pass, id, cont) {
     jsonrpc(user,
             'Bug.comments',
-            [{ids:[id]}],
+            [{ids:[id],
+              Bugzilla_login: user.name,
+              Bugzilla_password: pass}],
             function(err, res, data) {
                 if(err) {
                     console.log(err);
@@ -291,34 +305,50 @@ function post_comment(user, id, content, cont) {
             });
 }
 
+function BugSearch(user, pass, params) {
+    var _this = this;
 
-function bug_search(user, params, cont) {
+    params.Bugzilla_login = user.name;
+    params.Bugzilla_password = pass;
+
     jsonrpc(user,
             'Bug.search',
             params,
             function(err, res, data) {
                 if(err) {
-                    cont(err);
+                    _this.emit('error', err);
+                }
+                else if(data.error) {
+                    _this.emit('error', data.error);
                 }
                 else {
-                    cont(data.error, data.result.bugs);
+                    _this.emit('bugs', data.result.bugs);
                 }
-            });
+            });    
 }
 
-function search_assigned(user, cont) {
-    bug_search(user,
-               [{assigned_to: user.name,
-                 status: ['UNCONFIRIMED', 'NEW', 'ASSIGNED', 'REOPENED']}],
-               cont);
+BugSearch.prototype = new events.EventEmitter();
+
+function bug_search(user, pass, params) {
+    return new BugSearch(user, pass, params);
 }
 
-function search_reported(user, cont) {
-    bug_search(user,
-               [{creator: user.name,
-                 status: ['UNCONFIRIMED', 'NEW', 'ASSIGNED', 'REOPENED']}],
-               cont);
+function search_assigned(user, pass) {
+    return bug_search(
+        user,
+        pass,
+        [{assigned_to: user.name,
+          status: ['UNCONFIRIMED', 'NEW', 'ASSIGNED', 'REOPENED']}]
+    );
+}
 
+function search_reported(user, pass) {
+    return bug_search(
+        user,
+        pass,
+        [{creator: user.name,
+          status: ['UNCONFIRIMED', 'NEW', 'ASSIGNED', 'REOPENED']}]
+    );
 }
 
 // function cced() {
@@ -341,6 +371,6 @@ module.exports = {
     get_user: get_user,
     get_comments: get_comments,
     edit_bug: edit_bug,
-    bug_info: bug_info,
-    post_comment: post_comment
+    post_comment: post_comment,
+    builtin_searches: builtin_searches
 }

@@ -53,12 +53,14 @@ function get_searches(user, cont) {
     });
 }
 
-function index_bugs(user, search, cont) {
+function index_bugs(user, pass, search) {
     var key = user.name + '-buglist-' + search;
 
-    bz.get_bugs(user, search, function(err, bugs) {
-        if(!err) {
-            var trans = db.multi().del(key);
+    db.del(key);
+
+    return bz.get_bugs(user, pass, search)
+        .on('bugs', function(bugs) {
+            var trans = db.multi();
 
             _.each(bugs, function(bug) {
                 trans.sadd(key, JSON.stringify(bug));
@@ -68,28 +70,13 @@ function index_bugs(user, search, cont) {
                 trans.set('bug-' + bug.id, JSON.stringify(bug));
             });
 
-            trans.exec(function() {
-                cont && sort_bugs(bugs, cont);
-            });
-        }
-        else {
-            cont && cont();
-        }
-    });
-}
-
-function sort_bugs(bugs, cont) {
-    cont(bugs.sort(function(b1, b2) {
-        if(b1.summary > b2.summary) {
-            return -1;
-        }
-        return 1;
-    }));
+            trans.exec();
+        });
 }
 
 function get_bugs(user, search, cont) {
     db.smembers(user.name + '-buglist-' + search, function(err, bugs) {
-        sort_bugs(_.map(bugs, JSON.parse), cont);
+        cont(_.map(bugs, JSON.parse));
     });
 }
 
@@ -105,8 +92,8 @@ function get_comments(user, id, cont) {
     });
 }
 
-function index_comments(user, id, cont) {
-    bz.get_comments(user, id, function(err, comments) {
+function index_comments(user, pass, id, cont) {
+    bz.get_comments(user, pass, id, function(err, comments) {
         if(!err) {
             var key = user.name + '-' + id + '-comments';
             var trans = db.multi().del(key);
@@ -125,6 +112,16 @@ function index_comments(user, id, cont) {
     });
 }
 
+// these functions hopefully will not last for long. we have to store
+// the passwords for now to get access to private bugs.
+function temporarily_store_password(user, pass) {
+    db.set(user.name + '-password', pass);
+}
+
+function get_temporarily_stored_password(user, cont) {
+    db.get(user.name + '-password', cont);
+}
+
 module.exports = {
     get_user_options: get_user_options,
     set_user_options: set_user_options,
@@ -134,5 +131,7 @@ module.exports = {
     get_bugs: get_bugs,
     get_bug: get_bug,
     index_comments: index_comments,
-    get_comments: get_comments
+    get_comments: get_comments,
+    temporarily_store_password: temporarily_store_password,
+    get_temporarily_stored_password: get_temporarily_stored_password
 }

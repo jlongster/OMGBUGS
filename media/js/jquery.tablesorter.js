@@ -134,10 +134,11 @@
 				if(table.config.debug) { var parsersDebug = ""; }
 				
 				var rows = table.tBodies[0].rows;
-				
+			        var list = [];
+
 				if(table.tBodies[0].rows[0]) {
 
-					var list = [], cells = rows[0].cells, l = cells.length;
+					cells = rows[0].cells, l = cells.length;
 					
 					for (var i=0;i < l; i++) {
 						var p = false;
@@ -620,10 +621,8 @@
 						//set css for headers
 						setHeadersCss(this,$headers,sortList,sortCSS);
 						
-						
 						// sort the table and append it to the dom
 						appendToTable(this,multisort(this,sortList,cache));
-
 					}).bind("appendCache",function() {
 						
 						appendToTable(this,cache);

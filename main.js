@@ -4,6 +4,7 @@ var connect = require('connect');
 var bz = require('./bugzilla');
 var db = require('./db');
 var scrape = require('./scrape');
+var _ = require('./underscore');
 
 var app = express.createServer();
 
@@ -11,6 +12,7 @@ app.configure(function() {
     app.use(express.static(__dirname + '/media/'));
     app.use(express.bodyParser());
     app.use(express.cookieParser());
+    app.use(express.session({secret: '2C57FAA2-58D4-4DA3-B7FC-4D3F686E35F9'}));
 
     app.set('views', __dirname + '/views');
     app.set('view options', {layout: false});
@@ -66,6 +68,14 @@ app.post('/login/', function(req, res) {
                              httpOnly: true});
                  res.cookie('user', user.name, {path: '/',
                                                  httpOnly: true});
+
+                 // also store the pass redis so the websocket can access
+                 // it.
+                 // ** this is temporary ** until the bugzilla guys
+                 // let me get private bugs with the above cookies,
+                 // I'm forced to do this for now. (see bug 694663)
+                 db.temporarily_store_password(user, req.body.pass);
+
                  res.redirect('/');
              });
 });
@@ -120,70 +130,103 @@ io.set('authorization', function(data, cont) {
 io.sockets.on('connection', function(socket) {    
     var user = socket.handshake.user;
 
-    db.get_searches(user, function(searches) {
-        if(searches.length) {
-            socket.emit('searches', searches);
-        }
-        else {
-            socket.emit('new-user');
+    // we haven't hooked up pulse.mozilla.org yet, so we need to turn
+    // on polling mode
+    socket.emit('set-mode', 'poll');
 
-            db.index_searches(user, function(searches) {
-                socket.emit('searches', searches);
-                socket.emit('new-user-finished');
-            });
-        }
+    // bugs
+    socket.on('get-bug', function(id) {
+        db.get_bug(user, id, function(bug) {
+            socket.emit('update-bug', bug);
+        });
     });
+    
+    socket.on('get-bugs', function(term) {
+        socket.emit('begin-bugs', term);
 
-    db.index_searches(user, function(searches) {
-        socket.emit('searches', searches);
-    });
-
-    db.get_user_options(user, function(err, opts) {
-        socket.emit('settings', opts);
-    });
-
-    socket.on('search', function(msg) {
-        db.get_bugs(user, msg.term, function(bugs) {
-            socket.emit('bugs', {search: msg.term,
-                                 bugs: bugs,
-                                 key: msg.key});
+        db.get_bugs(user, term, function(bugs) {
+            socket.emit('add-bugs', {search: term,
+                                     bugs: bugs});
+            socket.emit('end-bugs', term);
         });
     });
 
-    socket.on('index-searches', function() {
-        db.index_searches(user, function(searches) {
-            socket.emit('searches', searches);
-        });
-    });
-
-    socket.on('searches', function() {
+    // searches
+    socket.on('get-searches', function() {
         db.get_searches(user, function(searches) {
-            socket.emit('searches', searches);
+            socket.emit('update-searches', searches);
+        });
+
+        db.index_searches(user, function(searches) {
+            socket.emit('update-searches', searches);
         });
     });
 
-    socket.on('index-search', function(msg) {
-        db.index_bugs(user, msg.term);
-    });
-
-    socket.on('settings', function(opts) {
-        db.set_user_options(user, opts);
-    });
-
+    // comments
     socket.on('get-comments', function(id) {
         db.get_comments(user, id, function(err, comments) {
             if(!err) {
-                socket.emit('comments', comments);
+                socket.emit('update-comments', comments);
             }
         });
     });
 
-    socket.on('index-comments', function(id) {
-        db.index_comments(user, id, function(err, comments) {
-            if(!err) {
-                socket.emit('comments', comments);
-            }
+    // settings
+    socket.on('get-settings', function() {
+        db.get_user_options(user, function(err, opts) {
+            socket.emit('update-settings', opts || {});
         });
     });
+
+    socket.on('set-settings', function(opts) {
+        db.set_user_options(user, opts);
+    });
+
+    // update (re-index) data for the client who is in polling
+    // mode. clients should only be in polling mode if
+    // pulse.mozilla.org is turned off, which provides much more
+    // friendly push notifications.
+    socket.on('update', function() {
+        console.log('updating the world...');
+
+        // get the saved password for the bug queries (hopefully
+        // bugzilla will support cookie-based requests for private
+        // bugs soon)
+        db.get_temporarily_stored_password(user, function(err, pass) {
+
+            // first, update the saved searches
+            db.index_searches(user, function(searches) {
+                // then index all of the bugs for each search
+                _.each(_.union(searches, _.keys(bz.builtin_searches)),
+                       function(search) {
+                           socket.emit('begin-bugs', search);
+
+                           db.index_bugs(user, pass, search)
+                               .on('error', function(err) {
+                                   console.log(err);
+                               })
+                               .on('bugs', function(bugs) {
+                                   socket.emit('add-bugs', {search: search,
+                                                               bugs: bugs});
+                               })
+                               .on('complete', function() {
+                                   socket.emit('end-bugs', search);
+                               });
+                       });
+            });
+        });
+    });
+
+    // in poll mode, the client asks to update a bug's comments after
+    // the user views the bug for a specified time
+    socket.on('update-comments', function(id) {
+        db.get_temporarily_stored_password(user, function(err, pass) {
+            db.index_comments(user, pass, id, function(err, comments) {
+                if(!err) {
+                    socket.emit('update-comments', comments);
+                }
+            });
+        });
+    });
+
 });
-
