@@ -166,6 +166,7 @@ $(function() {
         e.preventDefault();
 
         var bug = app.bug_table.collection.at(0);
+	var columns = app.settings.columns || [];
 
         Layers.push(
             '<h2>Columns</h2>' +
@@ -178,7 +179,7 @@ $(function() {
                 return acc;
             }, '') +
             '</ul>' +
-            '<textarea>' + app.settings.columns.join('\n') + '</textarea>' +
+            '<textarea>' + columns.join('\n') + '</textarea>' +
             '</div>' +
             '<input name ="save" type="submit" value="Save" />',
             'columns'
