@@ -1,0 +1,4 @@
+OMGBUGS is a node.js-powered web interface to Bugzilla. It helps you
+view bugs in many different ways, and has a few editing features as
+well. This is not meant to replace Bugzilla, and you still need to do
+heavy editing in Bugzilla.
