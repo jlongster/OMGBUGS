@@ -131,6 +131,20 @@ $(function() {
                                className: 'pending'}).render();
     }
 
+    function highlight_bug(id) {
+        // Highlight the row with a slow fade from red to
+        // white, then remove the background color to allow
+        // for the default css to still apply (striping,
+        // hovering, etc)
+        $('.' + id).find('td')
+            .css({'background-color': '#aa3333'})
+            .animate({'background-color': '#ffffff'},
+                     10000,
+                     function() {
+                         this.style.backgroundColor = '';
+                     });
+    }
+
     // interface actions
 
     $('nav a.file-bug').click(function(e) {
@@ -205,9 +219,9 @@ $(function() {
 
         $.post('/comment/', {id: id, content: content})
             .success(function() {
-                app.add_pending_comment(content);
+                add_pending_comment(content);
                 ta.val('');
-                app.socket.emit('index-comments', id);
+                app.update_comments(id);
             })
             .error(function() { 
                 console.log('comment posting error'); 
@@ -237,8 +251,7 @@ $(function() {
         $.post('/edit/', data)
             .success(function() {
                 Layers.pop();
-
-                app.socket.emit('index-search', {term: app.current_search});
+                app.update_bugs(app.current_search);
             })
             .error(function() {
                 console.log('bug edit error');
@@ -253,6 +266,7 @@ $(function() {
         reply: reply,
         show_searches: show_searches,
         comment_top: comment_top,
+        highlight_bug: highlight_bug,
         s: s
     };
 

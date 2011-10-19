@@ -227,14 +227,14 @@ BugSavedSearch.prototype.rfetch = function(i, limit) {
                     _this.emit('error', data.error);
                 }
                 else {
+                    _this.emit('bugs', data.result.bugs);
+
                     if(i+limit < _this.buglist.length) {
                         _this.rfetch(i+limit, limit);
                     }
                     else {
                         _this.emit('complete');
                     }
-
-                    _this.emit('bugs', data.result.bugs);
                 }
             });
 }
@@ -323,6 +323,7 @@ function BugSearch(user, pass, params) {
                 }
                 else {
                     _this.emit('bugs', data.result.bugs);
+                    _this.emit('complete');
                 }
             });    
 }

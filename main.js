@@ -142,12 +142,9 @@ io.sockets.on('connection', function(socket) {
     });
     
     socket.on('get-bugs', function(term) {
-        socket.emit('begin-bugs', term);
-
         db.get_bugs(user, term, function(bugs) {
-            socket.emit('add-bugs', {search: term,
+            socket.emit('set-bugs', {search: term,
                                      bugs: bugs});
-            socket.emit('end-bugs', term);
         });
     });
 
@@ -186,34 +183,49 @@ io.sockets.on('connection', function(socket) {
     // mode. clients should only be in polling mode if
     // pulse.mozilla.org is turned off, which provides much more
     // friendly push notifications.
-    socket.on('update', function() {
-        console.log('updating the world...');
+    socket.on('update', function(selected_search) {
+
+        function update_search(user, pass, search) {
+            var bugs = [];
+
+            db.index_bugs(user, pass, search)
+                .on('error', function(err) {
+                    console.log(err);
+                })
+                .on('bugs', function(more_bugs) {
+                    bugs = _.union(bugs, more_bugs);
+                })
+                .on('complete', function() {
+                    socket.emit('update-bugs', {search: search,
+                                                bugs: bugs});
+                });
+
+        }
 
         // get the saved password for the bug queries (hopefully
         // bugzilla will support cookie-based requests for private
         // bugs soon)
         db.get_temporarily_stored_password(user, function(err, pass) {
 
-            // first, update the saved searches
-            db.index_searches(user, function(searches) {
-                // then index all of the bugs for each search
-                _.each(_.union(searches, _.keys(bz.builtin_searches)),
-                       function(search) {
-                           socket.emit('begin-bugs', search);
+            if(selected_search) {
+                console.log('updating search "' + selected_search + '"');
 
-                           db.index_bugs(user, pass, search)
-                               .on('error', function(err) {
-                                   console.log(err);
-                               })
-                               .on('bugs', function(bugs) {
-                                   socket.emit('add-bugs', {search: search,
-                                                               bugs: bugs});
-                               })
-                               .on('complete', function() {
-                                   socket.emit('end-bugs', search);
-                               });
-                       });
-            });
+                // we're only updating one search
+                update_search(user, pass, selected_search);
+            }
+            else {
+                console.log('updating the world...');
+
+                // first, update the saved searches
+                db.index_searches(user, function(searches) {
+                    // then index all of the bugs for each search,
+                    // including the builtin searches
+                    _.each(_.union(searches, _.keys(bz.builtin_searches)),
+                           function(search) {
+                               update_search(user, pass, search);
+                           });
+                });
+            }
         });
     });
 

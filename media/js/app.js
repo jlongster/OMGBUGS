@@ -37,6 +37,14 @@ $(function() {
         socket.emit('get-comments', id);
     }
 
+    function update_bugs(search) {
+        // update a specific search when the user has made changes. this
+        // is only done in polling mode for immediate feedback.
+        if(app.mode == 'poll') {
+            socket.emit('update', search);
+        }
+    }
+
     function update_comments(id) {
         socket.emit('update-comments', id);
     }
@@ -55,8 +63,8 @@ $(function() {
         app.mode = mode;
 
         if(app.mode == 'poll') {
-            // Update every 5 minutes
-            setInterval(update, 1000*60*5);
+            // Update every 10 minutes
+            setInterval(update, 1000*60*10);
         }
     });
 
@@ -64,8 +72,8 @@ $(function() {
         if(!_.keys(app.settings).length) {
             // this is the first time we're getting the settings,
             // which means the user just loaded the page. go ahead and
-            // kick off an update to all the user's bugs
-            update();
+            // kick off an update after a minute
+            setTimeout(update, 1000*60);
         }
 
         app.settings = opts;
@@ -78,53 +86,54 @@ $(function() {
         }
     });
 
-    socket.on('begin-bugs', function(search) {
-        if(search == app.current_search) {
+    socket.on('set-bugs', function(msg) {
+        if(msg.search == app.current_search) {
             $(interface.s.searchbar).text(app.current_search);
             $(interface.s.actionbar).show();
 
-            // begin a mark and sweep collection by unmarking all the
-            // current bugs
-            _.each(app.bug_table.collection.models, function(bug) {
-                bug.set({marked: false});
-            });
+            app.bug_table.collection.reset(msg.bugs);
+
+            addons.emit('set-bugs');
         }
     });
 
-    socket.on('add-bugs', function(msg) {
+    socket.on('update-bugs', function(msg) {
         if(msg.search == app.current_search) {
             var model,
                 col = app.bug_table.collection;
 
-            _.each(msg.bugs, function(bug) {
-                bug = _.extend(bug, {marked: true});
+            // begin a mark and sweep collection by unmarking all the
+            // current bugs
+            _.each(app.bug_table.collection.models, function(bug) {
+                bug.set({_state: false});
+            });
 
+            _.each(msg.bugs, function(bug) {
                 if((model = col.get(bug.id))) {
-                    model.set(bug);
+                    model.set(_.extend(bug, {_state: 'changed'}));
                 }
                 else {
-                    col.add(new models.Bug(bug));
+                    col.add(new models.Bug(_.extend(bug, {_state: 'new'})));
                 }
             });
 
-            // TODO: need to update current bug if one is open
-        }
-    });
-
-    socket.on('end-bugs', function(search) {
-        if(search == app.current_search) {
-            var to_remove = [];
-            var col = app.bug_table.collection;
-
-            // remove all the bugs that haven't been marked
             _.each(col.models, function(bug) {
-                if(!bug.get('marked')) {
-                    to_remove.push(bug);
+                var state = bug.get('_state');
+
+                if(!state) {
+                    // remove all the bugs that haven't been marked
+                    col.remove(bug);
+                }
+                else if(state == 'new') {
+                    // highlight the ones that have been added
+                    interface.highlight_bug(bug.get('id'));
                 }
             });
 
-            col.remove(to_remove);
             app.bug_table.finalize();
+
+            addons.emit('update-bugs');
+            // TODO: need to update current bug if one is open
         }
     });
 
@@ -161,6 +170,10 @@ $(function() {
         builtin_searches: builtin_searches,
         search: search,
         get_comments: get_comments,
-        update_comments: update_comments
+        update_comments: update_comments,
+        update_bugs: update_bugs
     }
+
+    // purely for debugging
+    window.socket = socket;
 });
