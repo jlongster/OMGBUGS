@@ -7,7 +7,8 @@ $(function() {
     $(function() {
         // Load in the templates
         _.each(['comment', 'bug', 'edit',
-                'file-bug', 'about', 'settings'],
+                'file-bug', 'about', 'settings',
+                'welcome'],
                function(tmpl) {
                    var name = tmpl.replace(/-/g, '_');
 
@@ -145,6 +146,20 @@ $(function() {
                      });
     }
 
+    function notify(msg, type) {
+        $('.notification').text(msg)
+            .show()
+            .data('type', type);
+    }
+
+    function notify_close(type) {
+        var n = $('.notification');
+
+        if(n.data('type') == type) {
+            n.hide();
+        }
+    }
+
     // interface actions
 
     $('nav a.file-bug').click(function(e) {
@@ -268,6 +283,8 @@ $(function() {
         show_searches: show_searches,
         comment_top: comment_top,
         highlight_bug: highlight_bug,
+        notify: notify,
+        notify_close: notify_close,
         s: s
     };
 

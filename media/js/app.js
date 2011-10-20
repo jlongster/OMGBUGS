@@ -2,11 +2,19 @@ $(function() {
 
     var builtin_searches = ['Assigned to You', 'Reported by You'];
 
+    var MSG_GET_COMMENTS = 1,
+        MSG_UPDATE_BUGS = 2,
+        MSG_UPDATE_COMMENTS = 3,
+        MSG_UPDATE = 4,
+        MSG_SEARCH = 5;
+
     function search(term) {
         app.current_search = term;
+        $('.welcome').remove();
         views.make_table();
 
         socket.emit('get-bugs', term);
+        interface.notify('Fetching bugs...', MSG_SEARCH);
     }
     
     function set_default_search() {
@@ -35,6 +43,7 @@ $(function() {
 
     function get_comments(id) {
         socket.emit('get-comments', id);
+        interface.notify('Fetching comments...', MSG_GET_COMMENTS);
     }
 
     function update_bugs(search) {
@@ -42,17 +51,20 @@ $(function() {
         // is only done in polling mode for immediate feedback.
         if(app.mode == 'poll') {
             socket.emit('update', search);
+            interface.notify('Updating ' + search + '...', MSG_UPDATE_BUGS);
         }
     }
 
     function update_comments(id) {
         socket.emit('update-comments', id);
+        interface.notify('Updating comments...', MSG_UPDATE_COMMENTS);
     }
 
     // update the world (this is run in polling mode)
     function update() {
         if(app.mode == 'poll') {
             socket.emit('update');
+            interface.notify('Updating all your bugs...', MSG_UPDATE);
         }
     }
 
@@ -61,28 +73,44 @@ $(function() {
 
     socket.on('set-mode', function(mode) {
         app.mode = mode;
-
-        if(app.mode == 'poll') {
+        
+        if(mode == 'poll') {
             // Update every 10 minutes
             setInterval(update, 1000*60*10);
         }
     });
 
     socket.on('update-settings', function(opts) {
-        if(!_.keys(app.settings).length) {
-            // this is the first time we're getting the settings,
-            // which means the user just loaded the page. go ahead and
-            // kick off an update after a minute
-            setTimeout(update, 1000*60);
-        }
+        var new_user = opts.new_user;
+        delete opts.new_user;
 
+        if(!_.keys(app.settings).length) {
+            // first update to the page, fire off a quick update to
+            // everything instead of waiting the 5-10 min time for
+            // regular polling
+
+            if(app.mode == 'poll') {
+                if(new_user) {
+                    // this is a completely new user, so fire off
+                    // update instantly
+                    update();
+                }
+                else {
+                    // the user existed before, so wait 1 min
+                    setTimeout(update, 1000*60);
+                }
+            }
+        }
+        
         app.settings = opts;
 
-        if(!app.current_search && app.settings.default_search) {
-            search(app.settings.default_search);
+        if(!new_user) {
+            if(!app.current_search && app.settings.default_search) {
+                search(app.settings.default_search);
+            }
         }
         else {
-            views.make_table(true);
+            $('section.bugs').html(templates.welcome);
         }
     });
 
@@ -94,6 +122,14 @@ $(function() {
             app.bug_table.collection.reset(msg.bugs);
 
             addons.emit('set-bugs');
+            interface.notify_close(MSG_UPDATE_BUGS);
+            interface.notify_close(MSG_UPDATE);
+            interface.notify_close(MSG_SEARCH);
+        }
+
+        if(!app.current_search) {
+            interface.notify_close(MSG_UPDATE_BUGS);
+            interface.notify_close(MSG_UPDATE);
         }
     });
 
@@ -133,6 +169,8 @@ $(function() {
             app.bug_table.finalize();
 
             addons.emit('update-bugs');
+            interface.notify_close(MSG_UPDATE_BUGS);
+            interface.notify_close(MSG_UPDATE);
             // TODO: need to update current bug if one is open
         }
     });
@@ -155,6 +193,9 @@ $(function() {
         });
 
         Layers.adjust();
+
+        interface.notify_close(MSG_GET_COMMENTS);
+        interface.notify_close(MSG_UPDATE_COMMENTS);
     });
 
     socket.emit('get-searches');

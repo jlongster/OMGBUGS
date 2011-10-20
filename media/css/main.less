@@ -54,7 +54,7 @@ header {
             text-decoration: none;
 
             &:hover {
-                background-color: #876B46;
+                background-color: @searchbar-bg-color;
             }
         }
     }
@@ -70,6 +70,22 @@ header {
             margin: 0;
         }
     }
+}
+
+.notification {
+    display: none;
+    background-color: @searchbar-bg-color;
+    height: 1.5em;
+    padding-top: .25em;
+    width: 50%;
+    position: fixed;
+    bottom: 0;
+    left: 25%;
+    text-align: center;
+    color: white;
+    border-radius: 4px 4px 0 0;
+    box-shadow: 2px 4px 10px black;
+    z-index: 100;
 }
 
 .searchbar {
@@ -309,7 +325,8 @@ table.tablesorter {
     }
 }
 
-#login section {
+#login section,
+.welcome {
     width: 75%;
     margin: 0 auto;
 

@@ -6,10 +6,6 @@ var events = require('events');
 var scrape = require('./scrape');
 var _ = require('./underscore');
 
-
-var SAVED_SEARCHES_URL = '/userprefs.cgi?tab=saved-searches';
-var BUGLIST_URL = '/buglist.cgi?cmdtype=runnamed&namedcmd=';
-
 var _fake_user;
 var builtin_searches = {'Assigned to You': search_assigned,
                         'Reported by You': search_reported};
@@ -145,29 +141,8 @@ function login(user, pass, cont) {
 
 // Scrape the saved searches page for searches
 function get_searches(user, cont) {
-    scrape.parse_url(user, SAVED_SEARCHES_URL, function(err, window) {
-        if(err) {
-            cont(err);
-            return;
-        }
-
-        var form = window.$('form');
-        
-        if(!form.length) {
-            console.log('Warning: form not found ' +
-                        'on save searches page');
-        }
-        
-        var searches = [];
-        form.find('table:first tr').each(function() {
-            var td = window.$(this).find('td:first');
-            var search = td.text();
-            if(search != '' && search != 'My Bugs' && search != 'Assigned Bugs') {
-                searches.push(search);
-            }
-        });
-
-        cont(null, searches.sort());
+    scrape.get_searches(user, function(searches) {
+        cont(null, searches);
     });
 }
 
@@ -179,27 +154,9 @@ function BugSavedSearch(user, pass, search) {
     
     // first, get the list of all the bugs the search returns and then
     // fetch them
-    scrape.parse_url(user, BUGLIST_URL + search.replace(/ /g, '+'), function(err, window) {
-        if(err) {
-            cont(err);
-            return;
-        }
-
-        try {
-        var list = window.$('.bz_buglist');
-        var bugs = [];
-        list.find('tbody tr').each(function() {
-            // We get names that look like b123456, so strip
-            // off the leading "b"
-            bugs.push(this.id.substring(1));
-        });        
-
+    scrape.get_bugs_for_search(user, search, function(bugs) {
         _this.buglist = bugs;
         _this.rfetch(0, 100);
-        }
-        catch(e) {
-            console.log(e.message);
-        }
     });
 }
 

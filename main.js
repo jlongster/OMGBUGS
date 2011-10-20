@@ -1,3 +1,5 @@
+require('v8-profiler');
+
 var express = require('express');
 var socket_io = require('socket.io');
 var connect = require('connect');
@@ -24,6 +26,7 @@ app.configure(function() {
 
 app.get('/', function(req, res) {
     var user = bz.get_user(req);
+
     if(!user) {
         res.redirect('/login/');
     }
@@ -171,7 +174,7 @@ io.sockets.on('connection', function(socket) {
     // settings
     socket.on('get-settings', function() {
         db.get_user_options(user, function(err, opts) {
-            socket.emit('update-settings', opts || {});
+            socket.emit('update-settings', opts || {new_user: true});
         });
     });
 
