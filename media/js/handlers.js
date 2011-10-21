@@ -22,14 +22,13 @@ $(function() {
     }
 
     // interface functions
+    function render_searches(lst) {
+        return _.reduce(lst, function(acc, s) {
+            return acc + '<li><a href="#">' + s + '</a></li>';
+        }, '');
+    }
 
     function show_searches() {
-        function render_searches(lst) {
-            return _.reduce(lst, function(acc, s) {
-                return acc + '<li><a href="#">' + s + '</a></li>';
-            }, '');
-        }
-
         Layers.push('<h2 class="title">Searches</h2>' +
                     '<ul>' +
                     render_searches(app.searches) +
@@ -39,16 +38,10 @@ $(function() {
                     render_searches(app.builtin_searches) +
                     '</ul>',
                    'searches');
+    }
 
-        Layers.topmost()
-            .find('ul a')
-            .click(function(e) {
-                e.preventDefault();
-                var search = $(this).text();
-
-                Layers.pop();
-                app.search(search);
-            });
+    function update_searches() {
+        $('.searches ul:first').html(render_searches(app.searches));
     }
 
     function edit_bug() {
@@ -161,6 +154,14 @@ $(function() {
     }
 
     // interface actions
+
+    $('.searches ul a').live('click', function(e) {
+        e.preventDefault();
+        var search = $(this).text();
+
+        Layers.pop();
+        app.search(search);
+    });
 
     $('nav a.file-bug').click(function(e) {
         e.preventDefault();
@@ -281,6 +282,7 @@ $(function() {
         edit_bug: edit_bug,
         reply: reply,
         show_searches: show_searches,
+        update_searches: update_searches,
         comment_top: comment_top,
         highlight_bug: highlight_bug,
         notify: notify,

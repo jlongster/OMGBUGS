@@ -46,6 +46,12 @@ $(function() {
         interface.notify('Fetching comments...', MSG_GET_COMMENTS);
     }
 
+    function update_searches() {
+        if(app.mode == 'poll') {
+            socket.emit('update-searches');
+        }
+    }
+
     function update_bugs(search) {
         // update a specific search when the user has made changes. this
         // is only done in polling mode for immediate feedback.
@@ -60,7 +66,7 @@ $(function() {
         interface.notify('Updating comments...', MSG_UPDATE_COMMENTS);
     }
 
-    // update the world (this is run in polling mode)
+    // update the world
     function update() {
         if(app.mode == 'poll') {
             socket.emit('update');
@@ -73,10 +79,15 @@ $(function() {
 
     socket.on('set-mode', function(mode) {
         app.mode = mode;
-        
+
         if(mode == 'poll') {
-            // Update every 10 minutes
-            setInterval(update, 1000*60*10);
+            // we could update everything every 10 minutes, but this
+            // ends up clogging the connections while it's doing
+            // so. try instead to just update individual searches as
+            // they are performed and only update the search list
+            // every 10 min
+
+            setInterval(update_searches, 1000*60*10);
         }
     });
 
@@ -94,10 +105,13 @@ $(function() {
                     // this is a completely new user, so fire off
                     // update instantly
                     update();
+
+                    // register the user by setting initial settings
+                    socket.emit('set-settings', {});
                 }
                 else {
                     // the user existed before, so wait 1 min
-                    setTimeout(update, 1000*60);
+                    setTimeout(update_searches, 1000*60);
                 }
             }
         }
@@ -122,13 +136,13 @@ $(function() {
             app.bug_table.collection.reset(msg.bugs);
 
             addons.emit('set-bugs');
-            interface.notify_close(MSG_UPDATE_BUGS);
             interface.notify_close(MSG_UPDATE);
             interface.notify_close(MSG_SEARCH);
+
+            update_bugs(msg.search);
         }
 
         if(!app.current_search) {
-            interface.notify_close(MSG_UPDATE_BUGS);
             interface.notify_close(MSG_UPDATE);
         }
     });
@@ -177,6 +191,7 @@ $(function() {
 
     socket.on('update-searches', function(searches) {
         app.searches = searches;
+        interface.update_searches();
     });
 
     socket.on('update-comments', function(comments) {

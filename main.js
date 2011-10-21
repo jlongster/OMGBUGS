@@ -156,10 +156,6 @@ io.sockets.on('connection', function(socket) {
         db.get_searches(user, function(searches) {
             socket.emit('update-searches', searches);
         });
-
-        db.index_searches(user, function(searches) {
-            socket.emit('update-searches', searches);
-        });
     });
 
     // comments
@@ -182,12 +178,8 @@ io.sockets.on('connection', function(socket) {
         db.set_user_options(user, opts);
     });
 
-    // update (re-index) data for the client who is in polling
-    // mode. clients should only be in polling mode if
-    // pulse.mozilla.org is turned off, which provides much more
-    // friendly push notifications.
-    socket.on('update', function(selected_search) {
-
+    // updating/indexing the bugs
+    function update(selected_search) {
         function update_search(user, pass, search) {
             var bugs = [];
 
@@ -221,6 +213,8 @@ io.sockets.on('connection', function(socket) {
 
                 // first, update the saved searches
                 db.index_searches(user, function(searches) {
+                    socket.emit('update-searches', searches);
+
                     // then index all of the bugs for each search,
                     // including the builtin searches
                     _.each(_.union(searches, _.keys(bz.builtin_searches)),
@@ -229,6 +223,21 @@ io.sockets.on('connection', function(socket) {
                            });
                 });
             }
+        });
+    }
+
+    // update (re-index) data for the client who is in polling
+    // mode. clients should only be in polling mode if
+    // pulse.mozilla.org is turned off, which provides much more
+    // friendly push notifications.
+    socket.on('update', update);
+
+    // update the list of searches, a client in polling mode can
+    // request this
+    socket.on('update-searches', function() {
+        console.log('updating searches...');
+        db.index_searches(function(searches) {
+            socket.emit('update-searches', searches);
         });
     });
 
