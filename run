@@ -1,0 +1,4 @@
+#!/bin/sh
+
+exec 2>&1
+exec node --max-stack-size=367001600 main.js
