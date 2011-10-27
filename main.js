@@ -1,5 +1,3 @@
-require('v8-profiler');
-
 var express = require('express');
 var socket_io = require('socket.io');
 var connect = require('connect');
