@@ -53,12 +53,12 @@ function get_searches(user, cont) {
     });
 }
 
-function index_bugs(user, pass, search) {
+function index_bugs(user, search) {
     var key = user.name + '-buglist-' + search;
 
     db.del(key);
 
-    return bz.get_bugs(user, pass, search)
+    return bz.get_bugs(user, search)
         .on('bugs', function(bugs) {
             var trans = db.multi();
 
@@ -92,8 +92,8 @@ function get_comments(user, id, cont) {
     });
 }
 
-function index_comments(user, pass, id, cont) {
-    bz.get_comments(user, pass, id, function(err, comments) {
+function index_comments(user, id, cont) {
+    bz.get_comments(user, id, function(err, comments) {
         if(!err) {
             var key = user.name + '-' + id + '-comments';
             var trans = db.multi().del(key);
@@ -112,16 +112,6 @@ function index_comments(user, pass, id, cont) {
     });
 }
 
-// these functions hopefully will not last for long. we have to store
-// the passwords for now to get access to private bugs.
-function temporarily_store_password(user, pass) {
-    db.set(user.name + '-password', pass);
-}
-
-function get_temporarily_stored_password(user, cont) {
-    db.get(user.name + '-password', cont);
-}
-
 module.exports = {
     get_user_options: get_user_options,
     set_user_options: set_user_options,
@@ -132,6 +122,4 @@ module.exports = {
     get_bug: get_bug,
     index_comments: index_comments,
     get_comments: get_comments,
-    temporarily_store_password: temporarily_store_password,
-    get_temporarily_stored_password: get_temporarily_stored_password
 }

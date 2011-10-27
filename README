@@ -2,3 +2,7 @@ OMGBUGS is a node.js-powered web interface to Bugzilla. It helps you
 view bugs in many different ways, and has a few editing features as
 well. This is not meant to replace Bugzilla, and you still need to do
 heavy editing in Bugzilla.
+
+THIS PROJECT USES HIGHCHARTS, AN AWESOME LIBRARY MADE BY Torstein
+Hønsi. IT COMES BUNDLED WITH OMGBUGS AND MAY NOT BE USED FOR
+COMMERCIAL PURPOSES. SEE http://www.highcharts.com/license.

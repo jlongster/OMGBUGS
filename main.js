@@ -1,3 +1,5 @@
+require('v8-profiler');
+
 var express = require('express');
 var socket_io = require('socket.io');
 var connect = require('connect');
@@ -69,13 +71,6 @@ app.post('/login/', function(req, res) {
                              httpOnly: true});
                  res.cookie('user', user.name, {path: '/',
                                                  httpOnly: true});
-
-                 // also store the pass redis so the websocket can access
-                 // it.
-                 // ** this is temporary ** until the bugzilla guys
-                 // let me get private bugs with the above cookies,
-                 // I'm forced to do this for now. (see bug 694663)
-                 db.temporarily_store_password(user, req.body.pass);
 
                  res.redirect('/');
              });
@@ -178,10 +173,10 @@ io.sockets.on('connection', function(socket) {
 
     // updating/indexing the bugs
     function update(selected_search) {
-        function update_search(user, pass, search) {
+        function update_search(user, search) {
             var bugs = [];
 
-            db.index_bugs(user, pass, search)
+            db.index_bugs(user, search)
                 .on('error', function(err) {
                     console.log(err);
                 })
@@ -195,33 +190,27 @@ io.sockets.on('connection', function(socket) {
 
         }
 
-        // get the saved password for the bug queries (hopefully
-        // bugzilla will support cookie-based requests for private
-        // bugs soon)
-        db.get_temporarily_stored_password(user, function(err, pass) {
+        if(selected_search) {
+            console.log('updating search "' + selected_search + '"');
 
-            if(selected_search) {
-                console.log('updating search "' + selected_search + '"');
+            // we're only updating one search
+            update_search(user, selected_search);
+        }
+        else {
+            console.log('updating the world...');
 
-                // we're only updating one search
-                update_search(user, pass, selected_search);
-            }
-            else {
-                console.log('updating the world...');
+            // first, update the saved searches
+            db.index_searches(user, function(searches) {
+                socket.emit('update-searches', searches);
 
-                // first, update the saved searches
-                db.index_searches(user, function(searches) {
-                    socket.emit('update-searches', searches);
-
-                    // then index all of the bugs for each search,
-                    // including the builtin searches
-                    _.each(_.union(searches, _.keys(bz.builtin_searches)),
-                           function(search) {
-                               update_search(user, pass, search);
-                           });
-                });
-            }
-        });
+                // then index all of the bugs for each search,
+                // including the builtin searches
+                _.each(_.union(searches, _.keys(bz.builtin_searches)),
+                       function(search) {
+                           update_search(user, search);
+                       });
+            });
+        }
     }
 
     // update (re-index) data for the client who is in polling
@@ -242,12 +231,10 @@ io.sockets.on('connection', function(socket) {
     // in poll mode, the client asks to update a bug's comments after
     // the user views the bug for a specified time
     socket.on('update-comments', function(id) {
-        db.get_temporarily_stored_password(user, function(err, pass) {
-            db.index_comments(user, pass, id, function(err, comments) {
-                if(!err) {
-                    socket.emit('update-comments', comments);
-                }
-            });
+        db.index_comments(user, id, function(err, comments) {
+            if(!err) {
+                socket.emit('update-comments', comments);
+            }
         });
     });
 
