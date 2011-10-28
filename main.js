@@ -205,6 +205,7 @@ io.sockets.on('connection', function(socket) {
                 // including the builtin searches
                 _.each(_.union(searches, _.keys(bz.builtin_searches)),
                        function(search) {
+                           console.log('updating ' + search);
                            update_search(user, search);
                        });
             });

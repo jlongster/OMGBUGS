@@ -9,8 +9,7 @@ var _ = require('./underscore');
 
 var _fake_user;
 var builtin_searches = {'Assigned to You': search_assigned,
-                        'Reported by You': search_reported,
-                        'CCed on': search_cced};
+                        'Reported by You': search_reported};
 
 // if running locally, you have the option to bypass the login
 // system if you are offline and need to access bugs
@@ -74,7 +73,7 @@ function login(user, pass, cont) {
 
         if(err) {
             cont(err);
-            return;            
+            return;
         }
 
         if('set-cookie' in res.headers) {

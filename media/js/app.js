@@ -1,6 +1,6 @@
 $(function() {
 
-    var builtin_searches = ['Assigned to You', 'Reported by You', 'CCed on'];
+    var builtin_searches = ['Assigned to You', 'Reported by You'];
 
     var MSG_GET_COMMENTS = 1,
         MSG_UPDATE_BUGS = 2,
