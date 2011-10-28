@@ -72,6 +72,11 @@ function login(user, pass, cont) {
     rpc(null, 'User.login', [{"login": user, "password": pass}], function(err, res) {
         var cookies = {};
 
+        if(err) {
+            cont(err);
+            return;            
+        }
+
         if('set-cookie' in res.headers) {
             var raw = res.headers['set-cookie'];
 
@@ -109,11 +114,24 @@ function BugSavedSearch(user, search) {
     // fetch them
     scrape.get_bugs_for_search(user, search, function(bugs) {
         _this.buglist = bugs;
-        _this.rfetch(0, 200);
+        _this.fetch();
     });
 }
 
 BugSavedSearch.prototype = new events.EventEmitter();
+
+BugSavedSearch.prototype.fetch = function() {
+    var _this = this;
+    console.log('fetching ' + this.buglist.length + ' bugs...');
+
+    rpc(this.user,
+        'Bug.get',
+        [{ids: this.buglist}],
+        function(err, res, data) {
+            _this.emit('bugs', data.bugs);
+            _this.emit('complete');
+        });
+}
 
 // recursively fetch all the bugs in certain intervals. we have to do
 // this because we have to to use GET params and if the bug list is

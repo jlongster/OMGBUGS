@@ -221,7 +221,7 @@ io.sockets.on('connection', function(socket) {
     // request this
     socket.on('update-searches', function() {
         console.log('updating searches...');
-        db.index_searches(function(searches) {
+        db.index_searches(user, function(searches) {
             socket.emit('update-searches', searches);
         });
     });
